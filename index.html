@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Pac-Man — WebAssembly</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      background: #0b0b1e;
+      color: #fff;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0;
+      padding: 16px;
+    }
+    h1 { color: #ffe600; margin: 8px 0; font-size: 28px; }
+    #hud { display: flex; gap: 28px; font-size: 18px; margin: 8px 0 12px; }
+    #hud b { color: #ffe600; }
+    canvas {
+      width: 672px;              /* 448 x 1.5 */
+      max-width: 100%;
+      image-rendering: pixelated;
+      background: #000;
+      border: 2px solid #2430ff;
+      border-radius: 6px;
+    }
+    .aide { color: #9a9ad0; font-size: 14px; margin-top: 12px; text-align: center; }
+    #erreur { color: #ff6060; margin-top: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>&#x1F7E1; Pac-Man (WebAssembly)</h1>
+  <div id="hud">
+    <span>Score : <b id="score">0</b></span>
+    <span>Niveau : <b id="niveau">1</b></span>
+    <span>Vies : <b id="vies">&#x1F7E1;&#x1F7E1;&#x1F7E1;</b></span>
+  </div>
+  <canvas id="game" width="448" height="496"></canvas>
+  <p class="aide">
+    Fl&egrave;ches directionnelles (ou Z / Q / S / D) pour se d&eacute;placer &bull;
+    Entr&eacute;e ou Espace pour (re)d&eacute;marrer.<br>
+    Mange les 4 super-gommes pour rendre les fant&ocirc;mes vuln&eacute;rables !
+  </p>
+  <p id="erreur"></p>
+  <script src="game.js"></script>
+</body>
+</html>
