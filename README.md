@@ -1,100 +1,94 @@
-# 🟡 Pac-Man en WebAssembly
+# 🟡 Pac-Man 3D — WebAssembly, vue subjective (POV)
 
-Un clone de Pac-Man dont **toute la logique du jeu tourne en WebAssembly** :
-le code du jeu est écrit en C (`src/pacman.c`), compilé en un petit fichier
-`pacman.wasm` (~19 Ko, aucune bibliothèque, aucun framework), et le
-JavaScript (`game.js`) ne fait que charger le wasm, dessiner sur un canvas
-et transmettre les touches du clavier.
+Variante **3D** du clone de Pac-Man : le labyrinthe n'est plus une grille
+2D mais un **cube 15×15×15 généré procéduralement à chaque niveau**, Pac-Man
+se déplace en **6 directions** (haut/bas inclus) et on l'explore en
+**première personne** (rendu par *raycasting* façon Wolfenstein).
+
+Comme en 2D, **toute la logique tourne en WebAssembly** : le C
+(`src/pacman.c`) est compilé en `pacman.wasm` (~20 Ko, aucune bibliothèque) ;
+le JavaScript (`game.js`) ne fait que lire la position du joueur et le
+labyrinthe dans la mémoire du wasm et projeter la scène 3D sur un canvas.
 
 ## 📁 Les fichiers
 
 ```
 pacman-reboot/
 ├── index.html      # la page (à la racine = déploiement instantané)
-├── game.js         # charge le wasm + dessine + clavier + sons
-├── pacman.wasm     # le jeu compilé (déjà prêt, pas besoin de recompiler)
-├── src/pacman.c    # toute la logique du jeu (en C)
+├── game.js         # rendu 3D style Dungeon Master + HUD + clavier + sons
+├── pacman.wasm     # le jeu compilé (déjà prêt)
+├── src/pacman.c    # logique 3D en C (génération du cube, IA des fantômes…)
 ├── test/test.mjs   # test automatique avec node
 └── build.sh        # recompile le wasm (optionnel)
 ```
 
-Pour jouer, il suffit de mettre en ligne **3 fichiers statiques** à la
-racine : `index.html`, `game.js`, `pacman.wasm`.
+Pour jouer : mettre en ligne **3 fichiers statiques** à la racine
+(`index.html`, `game.js`, `pacman.wasm`).
 
-## ▶️ Tester en local (2 minutes)
+## 🎮 Contrôles
 
-Un navigateur refuse de charger un `.wasm` si on ouvre la page avec
-`file://...` : il faut passer par un petit serveur HTTP local.
+| Touche | Action |
+|---|---|
+| `Z` / `↑` | avancer |
+| `S` / `↓` | reculer |
+| `Q` / `←` et `D` / `→` | pivoter de 90° |
+| `E` / `C` | monter / descendre d'un étage (axe Z) |
+| `W` / `X` | regarder en haut / en bas |
+| `Entrée` / `Espace` | (re)démarrer |
+
+Mange les 4 grosses gommes roses (dont une au centre du cube) pour rendre
+les fantômes bleus et mangeables (200/400/800/1600 points). Chaque niveau
+génère un **nouveau cube**.
+
+## ▶️ Tester en local
 
 ```bash
 python3 -m http.server 8000
+# puis ouvrir http://localhost:8000
 ```
 
-Puis ouvre **http://localhost:8000** dans ton navigateur.
+⚠️ Ne pas ouvrir `index.html` en `file://` : le navigateur bloque le
+chargement du `.wasm` hors HTTP.
 
-(Avec Node : `npx serve .` fait pareil.)
+## 🚀 Déployer (au choix)
 
-**Contrôles** : flèches directionnelles (ou Z/Q/S/D), Entrée ou Espace pour
-(re)démarrer. Mange les 4 grosses gommes roses pour rendre les fantômes
-bleus et mangeables.
-
-## 🚀 Déployer sur Internet (choisis UNE méthode)
-
-### Méthode 1 — GitHub Pages (gratuit, recommandé pour débuter)
-
-Les 3 fichiers web sont déjà à la racine du dépôt, donc :
-
-1. Dans ce dépôt : *Settings* (⚙️ en haut) → *Pages* (menu de gauche).
-2. *Build and deployment* : *Source* = **Deploy from a branch**,
-   *Branch* = `main`, dossier = `/(root)`, puis *Save*.
-3. Attends 1–2 minutes : GitHub affiche l'URL, du type
-   **https://`<ton-pseudo>`.github.io/pacman-reboot/** → partage-la !
-
-### Méthode 2 — Netlify Drop (le plus simple, zéro configuration)
-
-1. Va sur [app.netlify.com/drop](https://app.netlify.com/drop).
-2. Glisse-dépose le contenu du dépôt (ou juste les 3 fichiers
-   `index.html`, `game.js`, `pacman.wasm`) dans la page.
-3. Netlify te donne immédiatement une URL publique du type
-   `https://<nom-aléatoire>.netlify.app` → ton jeu est en ligne.
-
-### Méthode 3 — Vercel
-
-```bash
-npx vercel
-```
-(suis les questions, choisis le nom du projet → URL publique donnée à la fin).
-
-> ⚠️ Important : ne double-clique jamais sur `index.html` (file://) pour
-> "tester en ligne" — le wasm ne se chargera pas. Utilise toujours une URL
-> en `http://localhost:...` ou `https://...`.
+1. **GitHub Pages** : *Settings → Pages → Deploy from a branch → `main`
+   (ou cette branche) → `/(root)` → Save* → URL
+   `https://<pseudo>.github.io/pacman-reboot/`.
+2. **Netlify Drop** : [app.netlify.com/drop](https://app.netlify.com/drop),
+   glisser les 3 fichiers → URL publique instantanée.
+3. **Vercel** : `npx vercel`.
 
 ## 🔧 Recompiler le wasm (optionnel)
 
-Le fichier `pacman.wasm` est déjà compilé, donc cette étape n'est utile
-que si tu modifies `src/pacman.c` :
-
 ```bash
-pip install ziglang        # ou installe clang
+pip install ziglang        # ou clang
 ./build.sh                 # produit pacman.wasm à la racine
 ```
 
-## 🧪 Tester la logique sans navigateur
+## 🧪 Tests
 
 ```bash
 node test/test.mjs
 ```
 
+Vérifie la coque du cube, le nombre de gommes, et simule une partie en 6D
+avec l'invariant « aucune entité ne traverse jamais un mur ».
+
 ## 🎮 Comment ça marche ?
 
-- Le C est compilé vers la cible `wasm32` : le navigateur exécute le binaire
-  wasm à quasi vitesse native.
-- Le wasm **importe** 6 fonctions du JS (`js_clear`, `js_pellet`,
-  `js_power`, `js_pac`, `js_ghost`, `js_sfx`) pour se faire dessiner, et
-  **exporte** l'API du jeu (`tick`, `set_dir`, `start`, `get_score`, ...).
-- `game.js` fait tourner `tick()` 60 fois par seconde et lit le score, les
-  vies, le niveau et l'état via les fonctions `get_*`.
-- Les 4 fantômes ont leur IA classique : Blinky poursuit Pac-Man, Pinky
-  vise devant lui, Inky fait le symétrique via Blinky, Clyde alterne
-  poursuite/coin. Super-gomme = fantômes bleus et mangeables (200/400/800/1600
-  points), tunnel latéral, niveaux infinis.
+- `src/pacman.c` génère le cube avec un *backtracker* 3D itératif (cases
+  impaires + quelques murs cassés pour faire des boucles), place gommes,
+  super-gommes et spawns.
+- Déplacements en point fixe, pixel par pixel : la direction est choisie
+  **au centre de la case avant de bouger**, donc on ne traverse jamais un mur.
+- Les 4 fantômes gardent leur IA classique (Blinky poursuit, Pinky vise
+  devant, Inky symétrique, Clyde alterne) mais en **6 directions** ; les
+  yeux d'un fantôme mangé retournent à son spawn.
+- `game.js` fait un **rendu 3D style Dungeon Master** : raycasting DDA pour
+  les murs (texturés en briques avec joint entre chaque case, 8 niveaux
+  d'ombrage selon la distance), floor-casting pour un **sol en damier**,
+  plafond en dégradé, gommes et fantômes en sprites avec test d'occlusion,
+  **mini-carte de l'étage courant** (position, cap, fantômes, gommes),
+  vignette et viseur. Le cap pivote par pas de 90° (lisse à l'affichage)
+  et `W`/`X` inclinent la vue (pitch).
