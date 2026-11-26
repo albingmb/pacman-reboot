@@ -2,11 +2,11 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Pac-Man — WebAssembly</title>
+  <title>Pac-Man 3D — WebAssembly (POV)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {
-      background: #0b0b1e;
+      background: #05050f;
       color: #fff;
       font-family: monospace;
       display: flex;
@@ -15,33 +15,37 @@
       margin: 0;
       padding: 16px;
     }
-    h1 { color: #ffe600; margin: 8px 0; font-size: 28px; }
-    #hud { display: flex; gap: 28px; font-size: 18px; margin: 8px 0 12px; }
+    h1 { color: #ffe600; margin: 8px 0; font-size: 26px; }
+    #hud { display: flex; gap: 24px; font-size: 17px; margin: 8px 0 12px; }
     #hud b { color: #ffe600; }
     canvas {
-      width: 672px;              /* 448 x 1.5 */
+      width: 640px;
       max-width: 100%;
       image-rendering: pixelated;
       background: #000;
       border: 2px solid #2430ff;
       border-radius: 6px;
     }
-    .aide { color: #9a9ad0; font-size: 14px; margin-top: 12px; text-align: center; }
+    .aide { color: #9a9ad0; font-size: 14px; margin-top: 12px; text-align: center; line-height: 1.6; }
     #erreur { color: #ff6060; margin-top: 12px; white-space: pre-wrap; }
   </style>
 </head>
 <body>
-  <h1>&#x1F7E1; Pac-Man (WebAssembly)</h1>
+  <h1>&#x1F7E1; Pac-Man 3D (WebAssembly, vue subjective)</h1>
   <div id="hud">
     <span>Score : <b id="score">0</b></span>
     <span>Niveau : <b id="niveau">1</b></span>
+    <span>Étage : <b id="etage">1</b></span>
     <span>Vies : <b id="vies">&#x1F7E1;&#x1F7E1;&#x1F7E1;</b></span>
   </div>
-  <canvas id="game" width="448" height="496"></canvas>
+  <canvas id="game" width="480" height="480"></canvas>
   <p class="aide">
-    Fl&egrave;ches directionnelles (ou Z / Q / S / D) pour se d&eacute;placer &bull;
-    Entr&eacute;e ou Espace pour (re)d&eacute;marrer.<br>
-    Mange les 4 super-gommes pour rendre les fant&ocirc;mes vuln&eacute;rables !
+    <b>Z</b> / &#x2191; avancer &bull; <b>S</b> / &#x2193; reculer &bull;
+    <b>Q</b> / &#x2190; et <b>D</b> / &#x2192; pivoter &bull;
+    <b>E</b> monter &bull; <b>C</b> descendre &bull;
+    <b>W</b> / <b>X</b> regarder en haut / en bas &bull; <b>Entr&eacute;e</b> (re)d&eacute;marrer<br>
+    Le labyrinthe est un <b>cube 15&times;15&times;15</b> g&eacute;n&eacute;r&eacute; &agrave; chaque niveau.
+    Mange les grosses gommes pour rendre les fant&ocirc;mes bleus et mangeables !
   </p>
   <p id="erreur"></p>
   <script src="game.js"></script>
