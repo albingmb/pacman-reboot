@@ -247,10 +247,8 @@ static void avancer(Ent *e, int vit, int est_pac, Fantome *f, int i) {
     e->acc += vit;
     while (e->acc >= 8) {
         e->acc -= 8;
-        e->px += DX[e->dir];
-        e->py += DY[e->dir];
-        if (e->px < 0) e->px += WIDTH;
-        if (e->px >= WIDTH) e->px -= WIDTH;
+        /* On decide au centre de la case AVANT de bouger : comme ca, une
+           entite arretee face a un mur ne rentre jamais dans le mur. */
         if (e->px % TILE == 8 && e->py % TILE == 8) {
             int tx = e->px / TILE, ty = e->py / TILE;
             if (est_pac) {
@@ -266,11 +264,15 @@ static void avancer(Ent *e, int vit, int est_pac, Fantome *f, int i) {
                 if (peut_pac(tx + DX[pac_voulue], ty + DY[pac_voulue]))
                     e->dir = pac_voulue;
                 if (!peut_pac(tx + DX[e->dir], ty + DY[e->dir]))
-                    return; /* mur : Pac-Man s'arrete */
+                    return; /* mur : on reste au centre, on n'avance pas */
             } else {
                 fantome_decider(f, i, tx, ty);
             }
         }
+        e->px += DX[e->dir];
+        e->py += DY[e->dir];
+        if (e->px < 0) e->px += WIDTH;
+        if (e->px >= WIDTH) e->px -= WIDTH;
     }
 }
 

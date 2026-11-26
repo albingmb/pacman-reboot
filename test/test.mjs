@@ -7,9 +7,13 @@ const bytes = await readFile(new URL('../pacman.wasm', import.meta.url));
 
 let nbClear = 0;
 const sfxVus = [];
+let pacPos = null;
+const ghostPos = [];
 const env = {
   js_clear() { nbClear++; },
-  js_pellet() {}, js_power() {}, js_pac() {}, js_ghost() {},
+  js_pellet() {}, js_power() {},
+  js_pac(x, y, d, m) { pacPos = { x, y }; },
+  js_ghost(x, y, c, m) { ghostPos.push({ x, y, m }); },
   js_sfx(id) { sfxVus.push(id); },
 };
 
@@ -46,12 +50,24 @@ const dirs = [0, 1, 2, 3];
 let maxTicks = 200000;
 let mortVus = 0;
 let precedent = -1;
+const ptrMaze = ex.get_maze();
 while (maxTicks-- > 0) {
   ex.set_dir(dirs[(Math.random() * 4) | 0]);
+  ghostPos.length = 0;
   ex.tick();
   const s = ex.get_state();
   if (s === 2 && precedent !== 2) mortVus++;
   precedent = s;
+  // invariant : aucune entite ne doit jamais occuper une case mur
+  const m = new Uint8Array(ex.memory.buffer);
+  const mur = (x, y) => {
+    const tx = Math.floor(x / 16), ty = Math.floor(y / 16);
+    return m[ptrMaze + ty * COLS + tx] === 35; // '#'
+  };
+  if ((s === 1) && pacPos && mur(pacPos.x, pacPos.y))
+    throw new Error(`Pac-Man dans un mur à ${pacPos.x},${pacPos.y}`);
+  for (const g of ghostPos)
+    if (mur(g.x, g.y)) throw new Error(`fantôme ${g.m} dans un mur à ${g.x},${g.y}`);
   if (s === 3) break; // GAME OVER
 }
 const score = ex.get_score();
