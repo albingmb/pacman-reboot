@@ -1,9 +1,13 @@
 /*
- * Pac-Man 3D — rendu subjectif (POV) par raycasting.
+ * Pac-Man 3D — rendu subjectif style "Dungeon Master".
  * Le wasm contient toute la logique (cube 15x15x15, deplacements 6D, IA) ;
  * ce fichier lit la position du joueur et le labyrinthe dans la memoire du
- * wasm, puis projette la scene en 3D sur le canvas (murs en colonnes DDA,
- * gommes et fantomes en sprites billboards).
+ * wasm et projette la scene en 3D sur le canvas :
+ *   - murs en briques texturees (raycasting DDA, ombrage a la distance)
+ *   - sol en damier projette (floor-casting) + plafond en dégradé
+ *   - gommes / fantomes en sprites billboards avec occlusion
+ *   - mini-carte de l'etage courant (position + orientation)
+ *   - vignette + viseur
  */
 'use strict';
 (() => {
@@ -17,10 +21,11 @@
   const niveauEl = document.getElementById('niveau');
   const viesEl = document.getElementById('vies');
   const etageEl = document.getElementById('etage');
+  const posEl = document.getElementById('pos');
   const erreurEl = document.getElementById('erreur');
 
   let ex = null, S = 0, mazePtr = 0;
-  let yaw = 0;              // orientation grille : 0:+X 1:+Y 2:-X 3:-Y
+  let yaw = 0;              // cap sur la grille : 0:+X 1:+Y 2:-X 3:-Y
   let viewAngle = 0;        // angle lisse pour le rendu
   let pitchPx = 0;          // decalage de l'horizon (regarder haut/bas)
   let tick = 0;
@@ -28,6 +33,8 @@
   let ghostList = [];
   let waka = false;
   let ac = null;
+  let wallShades = null;    // textures de mur pre-ombrees
+  let vignette = null;
 
   /* move intents wasm : 0:+X 1:+Y 2:-X 3:-Y 4:+Z 5:-Z */
   const OPP = [2, 3, 0, 1];
@@ -62,6 +69,58 @@
     js_ghost(x, y, z, couleur, mode) { ghostList.push({ x, y, z, couleur, mode }); },
     js_sfx(id) { sfx(id); },
   };
+
+  /* --- textures pre-rendues --- */
+  function makeWallTexture() {
+    const t = document.createElement('canvas');
+    t.width = 64; t.height = 64;
+    const c = t.getContext('2d');
+    c.fillStyle = '#0a0a28';                       // mortier
+    c.fillRect(0, 0, 64, 64);
+    for (let row = 0; row < 4; row++) {            // briques 32x16 decalees
+      const y = row * 16;
+      const off = (row % 2) * 16;
+      for (let bx = -1; bx < 3; bx++) {
+        const x = bx * 32 + off;
+        const v = (bx * 37 + row * 61) % 40;
+        c.fillStyle = 'rgb(' + (45 + v) + ',' + (70 + v) + ',' + (190 + (v >> 1)) + ')';
+        c.fillRect(x + 2, y + 2, 28, 12);
+        c.fillStyle = 'rgba(255,255,255,0.10)';    // reflet haut de brique
+        c.fillRect(x + 2, y + 2, 28, 3);
+      }
+    }
+    /* rainures verticales : chaque case a son propre "panneau" (style DM) */
+    c.fillStyle = 'rgba(0,0,15,0.95)';
+    c.fillRect(0, 0, 3, 64);
+    c.fillRect(61, 0, 3, 64);
+    return t;
+  }
+
+  function makeShades(tex) {
+    const out = [];
+    for (let i = 0; i < 8; i++) {
+      const t = document.createElement('canvas');
+      t.width = 64; t.height = 64;
+      const c = t.getContext('2d');
+      c.drawImage(tex, 0, 0);
+      c.fillStyle = 'rgba(0,0,10,' + (i / 7 * 0.78).toFixed(3) + ')';
+      c.fillRect(0, 0, 64, 64);
+      out.push(t);
+    }
+    return out;
+  }
+
+  function makeVignette() {
+    const v = document.createElement('canvas');
+    v.width = W; v.height = H;
+    const c = v.getContext('2d');
+    const g = c.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.78);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.5)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, W, H);
+    return v;
+  }
 
   /* --- projection 3D -> ecran --- */
   function project(wx, wy, wz, px, py, pz, horizon) {
@@ -115,10 +174,59 @@
     ctx.globalAlpha = 1;
   }
 
-  /* --- rendu raycasting --- */
+  /* --- mini-carte de l'etage courant --- */
+  function drawMinimap(maze, px, py, pz) {
+    const ms = 9;
+    const mw = S * ms;
+    const ox = W - mw - 12, oy = 12;
+    const cellZ = Math.min(S - 1, Math.max(0, Math.floor(pz / TILE)));
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#000010';
+    ctx.fillRect(ox - 4, oy - 4, mw + 8, mw + 8);
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const c = maze[(cellZ * S + y) * S + x];
+        if (c === 35) {
+          ctx.fillStyle = '#2b3dff';
+          ctx.fillRect(ox + x * ms, oy + y * ms, ms, ms);
+        } else {
+          ctx.fillStyle = '#0a0a18';
+          ctx.fillRect(ox + x * ms, oy + y * ms, ms, ms);
+          if (c === 46) {
+            ctx.fillStyle = '#ffb8ae';
+            ctx.fillRect(ox + x * ms + ms / 2 - 1, oy + y * ms + ms / 2 - 1, 2, 2);
+          } else if (c === 111) {
+            ctx.fillStyle = '#ffb8ae';
+            ctx.fillRect(ox + x * ms + ms / 2 - 2, oy + y * ms + ms / 2 - 2, 4, 4);
+          }
+        }
+      }
+    for (const g of ghostList) {
+      if (Math.floor(g.z / TILE) !== cellZ) continue;
+      ctx.fillStyle = (g.mode === 2 || g.mode === 3)
+        ? '#2430ff'
+        : ['#ff2222', '#ffb8de', '#00e8e8', '#ffb847'][g.couleur];
+      ctx.fillRect(ox + (g.x / TILE) * ms - 3, oy + (g.y / TILE) * ms - 3, 6, 6);
+    }
+    /* fleche du joueur orientee selon le cap */
+    ctx.fillStyle = '#ffe600';
+    ctx.save();
+    ctx.translate(ox + (px / TILE) * ms, oy + (py / TILE) * ms);
+    ctx.rotate(yaw * Math.PI / 2);
+    ctx.beginPath();
+    ctx.moveTo(6, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(120,140,255,0.6)';
+    ctx.strokeRect(ox - 4, oy - 4, mw + 8, mw + 8);
+  }
+
+  /* --- rendu principal (style Dungeon Master) --- */
   function render() {
     const px = ex.get_px(), py = ex.get_py(), pz = ex.get_pz();
     const maze = new Uint8Array(ex.memory.buffer, mazePtr, S * S * S);
+    const cellZ = Math.min(S - 1, Math.max(0, Math.floor(pz / TILE)));
 
     /* lissage de l'angle de vue vers le cap de la grille */
     const target = yaw * Math.PI / 2;
@@ -129,20 +237,49 @@
 
     const horizon = H / 2 + pitchPx;
 
-    /* plafond et sol */
-    const gUp = ctx.createLinearGradient(0, 0, 0, horizon);
-    gUp.addColorStop(0, '#000008');
-    gUp.addColorStop(1, '#101030');
+    /* plafond en degrade */
+    const gUp = ctx.createLinearGradient(0, 0, 0, Math.max(horizon, 1));
+    gUp.addColorStop(0, '#020208');
+    gUp.addColorStop(1, '#0d0d24');
     ctx.fillStyle = gUp;
     ctx.fillRect(0, 0, W, Math.max(horizon, 0));
-    const gDown = ctx.createLinearGradient(0, horizon, 0, H);
-    gDown.addColorStop(0, '#1a1a08');
-    gDown.addColorStop(1, '#000');
-    ctx.fillStyle = gDown;
-    ctx.fillRect(0, Math.min(horizon, H), W, H);
 
-    /* murs : un rayon par colonne d'ecran (DDA sur la tranche z du joueur) */
-    const cellZ = Math.min(S - 1, Math.max(0, Math.floor(pz / TILE)));
+    /* sol en damier par floor-casting */
+    const y0 = Math.max(0, Math.ceil(horizon));
+    if (y0 < H) {
+      const rows = H - y0;
+      const img = ctx.createImageData(W, rows);
+      const data = img.data;
+      const dirX = Math.cos(viewAngle), dirY = Math.sin(viewAngle);
+      const t = Math.tan(FOV / 2);
+      const plX = -dirY * t, plY = dirX * t;
+      const rX0 = dirX - plX, rY0 = dirY - plY;
+      const rX1 = dirX + plX, rY1 = dirY + plY;
+      for (let y = 0; y < rows; y++) {
+        const p = (y + y0) - horizon + 0.5;
+        if (p <= 0.01) continue;
+        const D = (0.5 * TILE * focal) / p;   // distance reelle au sol
+        const shade = Math.max(0.12, Math.min(1, 1.25 - D / 240));
+        for (let x = 0; x < W; x++) {
+          const w = x / W;
+          const fx = px + D * (rX0 + (rX1 - rX0) * w);
+          const fy = py + D * (rY0 + (rY1 - rY0) * w);
+          const cx = Math.floor(fx / TILE), cy = Math.floor(fy / TILE);
+          const wall = cx < 0 || cy < 0 || cx >= S || cy >= S ||
+            maze[(cellZ * S + cy) * S + cx] === 35;
+          let r, g, b;
+          if (wall) { r = 20; g = 24; b = 60; }
+          else if ((cx + cy) & 1) { r = 46; g = 50; b = 84; }
+          else { r = 22; g = 24; b = 44; }
+          const o = (y * W + x) * 4;
+          data[o] = r * shade; data[o + 1] = g * shade; data[o + 2] = b * shade; data[o + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, y0);
+    }
+
+    /* murs en briques texturees : un rayon par colonne (DDA) */
+    ctx.imageSmoothingEnabled = false;
     const wallDist = new Float32Array(W);
     for (let col = 0; col < W; col++) {
       const ang = viewAngle + (col / W - 0.5) * FOV;
@@ -162,16 +299,17 @@
         if (mapX < 0 || mapY < 0 || mapX >= S || mapY >= S) { dist = 1e9; break; }
         if (maze[(cellZ * S + mapY) * S + mapX] === 35) break; // '#'
       }
-      const perp = dist * Math.cos(ang - viewAngle); // correction fisheye
+      const perp = Math.max(0.05, dist * Math.cos(ang - viewAngle)); // anti-fisheye
       wallDist[col] = perp;
-      const lineH = (TILE / Math.max(perp, 0.05)) * focal;
-      const shade = Math.max(0.12, 1 - perp / 200) * (side ? 0.7 : 1);
-      ctx.fillStyle = 'rgb(' + Math.round(30 + 30 * shade) + ',' +
-        Math.round(50 + 60 * shade) + ',' + Math.round(160 + 95 * shade) + ')';
-      ctx.fillRect(col, horizon - lineH / 2, 1, lineH);
+      let wallX = (side === 0) ? py + perp * dy : px + perp * dx;
+      wallX -= Math.floor(wallX);
+      const texX = Math.min(63, Math.floor(wallX * 64));
+      const level = Math.min(7, Math.floor(perp / 24) + (side ? 2 : 0));
+      const lineH = (TILE / perp) * focal;
+      ctx.drawImage(wallShades[level], texX, 0, 1, 64, col, horizon - lineH / 2, 1, lineH);
     }
 
-    /* sprites : gommes + fantomes, tries du plus loin au plus pres */
+    /* sprites : gommes + fantomes, du plus loin au plus pres */
     const sprites = [];
     for (let z = 0; z < S; z++)
       for (let y = 0; y < S; y++)
@@ -205,7 +343,9 @@
       ctx.globalAlpha = 1;
     }
 
-    /* viseur */
+    /* vignette + mini-carte + viseur */
+    ctx.drawImage(vignette, 0, 0);
+    drawMinimap(maze, px, py, pz);
     ctx.fillStyle = '#ffe600';
     ctx.fillRect(W / 2 - 1, horizon - 1, 3, 3);
   }
@@ -225,6 +365,8 @@
     const v = Math.max(ex.get_lives(), 0);
     viesEl.textContent = v > 0 ? '\u{1F7E1}'.repeat(v) : '—';
     etageEl.textContent = Math.floor(ex.get_pz() / TILE);
+    posEl.textContent = Math.floor(ex.get_px() / TILE) + ',' +
+      Math.floor(ex.get_py() / TILE) + ',' + Math.floor(ex.get_pz() / TILE);
     const s = ex.get_state();
     if (s === 0) texte('PRÊT !', W / 2, H / 2, 26, '#ffe600');
     else if (s === 3) {
@@ -268,6 +410,8 @@
     ex.init_game();
     S = ex.get_size();
     mazePtr = ex.get_maze();
+    wallShades = makeShades(makeWallTexture());
+    vignette = makeVignette();
 
     let dernier = performance.now();
     let acc = 0;

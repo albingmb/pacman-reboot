@@ -15,7 +15,7 @@ labyrinthe dans la mémoire du wasm et projeter la scène 3D sur un canvas.
 ```
 pacman-reboot/
 ├── index.html      # la page (à la racine = déploiement instantané)
-├── game.js         # raycasting POV + HUD + clavier + sons
+├── game.js         # rendu 3D style Dungeon Master + HUD + clavier + sons
 ├── pacman.wasm     # le jeu compilé (déjà prêt)
 ├── src/pacman.c    # logique 3D en C (génération du cube, IA des fantômes…)
 ├── test/test.mjs   # test automatique avec node
@@ -85,7 +85,10 @@ avec l'invariant « aucune entité ne traverse jamais un mur ».
 - Les 4 fantômes gardent leur IA classique (Blinky poursuit, Pinky vise
   devant, Inky symétrique, Clyde alterne) mais en **6 directions** ; les
   yeux d'un fantôme mangé retournent à son spawn.
-- `game.js` fait un **raycasting** : un rayon par colonne d'écran (DDA dans
-  la tranche Z du joueur), murs dessinés en bandes verticales avec
-  ombrage selon la distance, puis gommes et fantômes projetés en sprites
-  avec test d'occlusion. Le cap pivote par pas de 90° (lisse à l'affichage).
+- `game.js` fait un **rendu 3D style Dungeon Master** : raycasting DDA pour
+  les murs (texturés en briques avec joint entre chaque case, 8 niveaux
+  d'ombrage selon la distance), floor-casting pour un **sol en damier**,
+  plafond en dégradé, gommes et fantômes en sprites avec test d'occlusion,
+  **mini-carte de l'étage courant** (position, cap, fantômes, gommes),
+  vignette et viseur. Le cap pivote par pas de 90° (lisse à l'affichage)
+  et `W`/`X` inclinent la vue (pitch).
